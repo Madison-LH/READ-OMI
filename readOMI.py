@@ -42,12 +42,12 @@ filename = "./OMI-Aura_L2-OMNO2_2004m1001t1810-o01143_v003-2019m0814t172958.he5"
 with h5py.File(filename, "r") as f:
     # Print all root level object names (aka keys) 
     # these can be group or dataset names 
-    print("Keys: %s" % f.keys())
+    #print("Keys: %s" % f.keys())
     # get first object name/key; may or may NOT be a group
     a_group_key = list(f.keys())[0]
 
     # get the object type for a_group_key: usually group or dataset
-    print(type(f[a_group_key])) 
+    #print(type(f[a_group_key])) 
 
     # If a_group_key is a group name, 
     # this gets the object names in the group and returns as a list
@@ -71,7 +71,7 @@ with h5py.File(filename, "r") as f:
     structmetadatagrp= np.array(G1.get('StructMetadata.0'))
     print(structmetadatagrp)
     
-    #print(np.array(dataset))
+    print(np.array(dataset))
     dataset2= f.get('HDFEOS')
     print(dataset2)
     print(np.array(dataset2))
@@ -80,18 +80,64 @@ with h5py.File(filename, "r") as f:
     SWATHSgrp= np.array(G1.get('SWATHS'))
     print(SWATHSgrp)
     
+
     #plotting NO2 column data
     #imports
-    from netCDF4 import Dataset as NetCDFFile 
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from mpl_toolkits.basemap import Basemap
-    import rioxarray
+import os
 
-    #initalize directory for no2 data
-    fn= './OMI-Aura_L2-OMNO2_2004m1001t1810-o01143_v003-2019m0814t172958-HDFEOS-SWATHS-ColumnAmountNO2-Data_Fields-ColumnAmountNO2Strat.nc'
-    xr = rioxarray.open_rasterio(fn).plot()
-    print(xr)
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from mpl_toolkits.basemap import Basemap
+import numpy as np
+import h5py
+
+FILE_NAME = "./OMI-Aura_L2-OMNO2_2004m1001t1810-o01143_v003-2019m0814t172958.he5"
+path = '/HDFEOS/SWATHS/ColumnAmountNO2/Data Fields/'
+DATAFIELD_NAME = path + 'CloudFraction'
+with h5py.File(FILE_NAME, mode='r') as f:
+    dset = f[DATAFIELD_NAME]
+    data =dset[:].astype(np.float64)
+
+    # Retrieve any attributes that may be needed later.
+    # String attributes actually come in as the bytes type and should
+    # be decoded to UTF-8 (python3).
+    scale = f[DATAFIELD_NAME].attrs['ScaleFactor']
+    offset = f[DATAFIELD_NAME].attrs['Offset']
+    missing_value = f[DATAFIELD_NAME].attrs['MissingValue']
+    fill_value = f[DATAFIELD_NAME].attrs['_FillValue']
+    title = f[DATAFIELD_NAME].attrs['Title'].decode()
+    units = f[DATAFIELD_NAME].attrs['Units'].decode()
+
+    # Retrieve the geolocation data.
+    path = '/HDFEOS/SWATHS/ColumnAmountNO2/Geolocation Fields/'
+    latitude = f[path + 'Latitude'][:]
+    longitude = f[path + 'Longitude'][:]
+
+    data[data == missing_value] = np.nan
+    data[data == fill_value] = np.nan
+    data = scale * (data - offset)
+    datam = np.ma.masked_where(np.isnan(data), data)
+
+    # Draw an equidistant cylindrical projection using the low resolution
+    # coastline database.
+    m = Basemap(projection='cyl', resolution='l',
+                llcrnrlat=-90, urcrnrlat = 90,
+                llcrnrlon=-180, urcrnrlon = 180)
+    m.drawcoastlines(linewidth=0.5)
+    m.drawparallels(np.arange(-90., 120., 30.), labels=[1, 0, 0, 0])
+    m.drawmeridians(np.arange(-180, 180., 45.), labels=[0, 0, 0, 1])
+    m.scatter(longitude, latitude, c=datam, s=1, cmap=plt.cm.jet,
+             edgecolors=None, linewidth=0)    
+    cb = m.colorbar()
+    cb.set_label(units)
+
+
+    basename = os.path.basename(FILE_NAME)
+    plt.title('{0}\n{1}'.format(basename, title), fontsize=8)
+    fig = plt.gcf()
+    pngfile = "{0}.py.png".format(basename)
+    fig.savefig(pngfile)
+
 
 
 
